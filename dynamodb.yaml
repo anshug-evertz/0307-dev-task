@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Creates the Channel Management service's DynamoDB Channel table, and associated global secondary indexes.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Resource Management
+        Parameters:
+          - Name
+          - Owner
+          - Project
+
+Parameters:
+  Name:
+    Type: String
+    Description: >-
+      A String that can be used to Identify Resources created by this Template.
+      Resources may use this Parameter when creating the Name Tag. The Name Tag
+      is commonly used by the AWS Console to provide a friendlier name to
+      Resources. This may be used to form part of a Name Tag.
+  Owner:
+    Type: String
+    Description: >-
+      The email address for the Team that owns the Resources created by this
+      Template.
+    AllowedPattern: ^.*@evertz\.(io|com|tv)$
+    ConstraintDescription: Must be an evertz.com,.io or .tv email address
+
+  Project:
+    Type: String
+    Description: >-
+      The name of the Project that the Resources created by this Template
+      belong to. A Team may own many Projects.
+Resources:
+  IncidentTableV1:
+    Type: "AWS::DynamoDB::Table"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: tenant-incident-id
+          AttributeType: S
+        - AttributeName: config-type-sk
+          AttributeType: S
+        - AttributeName: tenant-id
+          AttributeType: S
+        - AttributeName: channel-id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tenant-incident-id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: Tenant-Lookup
+          KeySchema:
+            - AttributeName: tenant-id
+              KeyType: HASH
+            - AttributeName: config-type-sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - data
+        - IndexName: Channel-Lookup
+          KeySchema:
+            - AttributeName: channel-id
+              KeyType: HASH
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - data
+      SSESpecification:
+        SSEEnabled: True
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Name
+          Value: !Ref Name
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Project
+          Value: !Ref Project
+        - Key: Group
+          Value: evertz.io
+
+  IncidentTableV2:
+    Type: "AWS::DynamoDB::Table"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: tenant-incident-id
+          AttributeType: S
+        - AttributeName: tenant-id-config-type
+          AttributeType: S
+        - AttributeName: channel-id
+          AttributeType: S
+        - AttributeName: epoch
+          AttributeType: N
+      KeySchema:
+        - AttributeName: tenant-incident-id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: Tenant-Lookup
+          KeySchema:
+            - AttributeName: tenant-id-config-type
+              KeyType: HASH
+            - AttributeName: epoch
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - data
+        - IndexName: Channel-Lookup
+          KeySchema:
+            - AttributeName: channel-id
+              KeyType: HASH
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - data
+      SSESpecification:
+        SSEEnabled: True
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Name
+          Value: !Ref Name
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Project
+          Value: !Ref Project
+        - Key: Group
+          Value: evertz.io
+
+  HiddenIncidentTableV1:
+    Type: "AWS::DynamoDB::Table"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: tenant-user-incident-id
+          AttributeType: S
+        - AttributeName: user-id
+          AttributeType: S
+        - AttributeName: epoch
+          AttributeType: N
+      KeySchema:
+        - AttributeName: tenant-user-incident-id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: User-Lookup
+          KeySchema:
+            - AttributeName: user-id
+              KeyType: HASH
+            - AttributeName: epoch
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+      SSESpecification:
+        SSEEnabled: True
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: True
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Name
+          Value: !Ref Name
+        - Key: Owner
+          Value: !Ref Owner
+        - Key: Project
+          Value: !Ref Project
+        - Key: Group
+          Value: evertz.io
+
+  DatabaseWrite:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Write Access to a DynamoDB Table
+      Path: /
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:BatchWriteItem
+              - dynamodb:DeleteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Resource:
+              - !GetAtt IncidentTableV1.Arn
+              - !GetAtt IncidentTableV2.Arn
+
+  DatabaseRead:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Ready Only Access to a DynamoDB Table
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource:
+              - !GetAtt IncidentTableV1.Arn
+              - !Sub ${IncidentTableV1.Arn}/index/*
+              - !GetAtt IncidentTableV2.Arn
+              - !Sub ${IncidentTableV2.Arn}/index/*
+
+  HiddenDatabaseWrite:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Write Access to a DynamoDB Table
+      Path: /
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:BatchWriteItem
+              - dynamodb:DeleteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Resource:
+              - !GetAtt HiddenIncidentTableV1.Arn
+
+  HiddenDatabaseRead:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Ready Only Access to a DynamoDB Table
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource:
+              - !GetAtt HiddenIncidentTableV1.Arn
+              - !Sub ${HiddenIncidentTableV1.Arn}/index/*
+
+Outputs:
+  IncidentTableV1Name:
+    Description: The name of the DynamoDB Table
+    Value: !Ref IncidentTableV1
+
+  IncidentTableV2Name:
+    Description: The name of the DynamoDB V2 Table
+    Value: !Ref IncidentTableV2
+
+  DatabaseReadPolicy:
+    Description: The ARN of the DynamoDB Read Policy
+    Value: !Ref DatabaseRead
+
+  DatabaseWritePolicy:
+    Description: The ARN of the DynamoDB Write Policy
+    Value: !Ref DatabaseWrite
+
+  HiddenIncidentTableV1Name:
+    Description: The name of the DynamoDB Table
+    Value: !Ref HiddenIncidentTableV1
+
+  HiddenDatabaseReadPolicy:
+    Description: The ARN of the DynamoDB Read Policy
+    Value: !Ref HiddenDatabaseRead
+
+  HiddenDatabaseWritePolicy:
+    Description: The ARN of the DynamoDB Write Policy
+    Value: !Ref HiddenDatabaseWrite
